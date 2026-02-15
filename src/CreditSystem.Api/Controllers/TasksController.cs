@@ -12,10 +12,12 @@ using System.Security.Claims;
 public class TasksController : ControllerBase
 {
     private readonly ITaskService _taskService;
+    private readonly ITaskExecutionService _taskExecutionService;
 
-    public TasksController(ITaskService taskService)
+    public TasksController(ITaskService taskService, ITaskExecutionService taskExecutionService)
     {
         _taskService = taskService;
+        _taskExecutionService = taskExecutionService;
     }
 
     /// <summary>
@@ -64,5 +66,44 @@ public class TasksController : ControllerBase
         var tasksList = await _taskService.GetUserTasksAsync(userId, cancellationToken);
 
         return Ok(tasksList);
+    }
+
+    /// <summary>
+    /// Execute a task for the authenticated user
+    /// </summary>
+    /// <param name="id">Task ID to execute</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Task execution information with status and cost</returns>
+    [HttpPost("{id}/execute")]
+    [Authorize]
+    [ProducesResponseType(typeof(ExecuteTaskResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExecuteTask(Guid id, CancellationToken cancellationToken)
+    {
+        var userIdClaim = User.FindFirst(JwtRegisteredClaimNames.Sub) 
+            ?? User.FindFirst(ClaimTypes.NameIdentifier);
+
+        if (userIdClaim == null || !Guid.TryParse(userIdClaim.Value, out var userId))
+        {
+            return Unauthorized(new { message = "Invalid or missing user ID in token" });
+        }
+
+        try
+        {
+            var executeResponse = await _taskExecutionService.ExecuteTaskAsync(id, userId, cancellationToken);
+            return Ok(executeResponse);
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (ex.Message.Contains("not found"))
+                return NotFound(new { message = ex.Message });
+
+            if (ex.Message.Contains("not authorized"))
+                return Forbid();
+
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }

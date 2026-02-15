@@ -28,6 +28,19 @@ public class TaskRepository : ITaskRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.TaskItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+    }
+
+    public async Task<TaskItem?> GetByIdAsyncTracked(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _context.TaskItems
+            .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
+    }
+
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         await _context.SaveChangesAsync(cancellationToken);

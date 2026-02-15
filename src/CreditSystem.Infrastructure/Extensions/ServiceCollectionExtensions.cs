@@ -7,6 +7,7 @@ using CreditSystem.Application.Services;
 using CreditSystem.Infrastructure.Persistence;
 using CreditSystem.Infrastructure.Repositories;
 using CreditSystem.Infrastructure.Security;
+using CreditSystem.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,7 +43,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<ITaskExecutionService, TaskExecutionService>();
 
         return services;
     }
 }
+
