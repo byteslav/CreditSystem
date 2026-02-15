@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IJwtTokenGenerator>(sp =>
             new JwtTokenGenerator(secretKey, issuer, audience, expirationMinutes: 60));
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserService, UserService>();
 
         return services;
     }
