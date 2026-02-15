@@ -1,17 +1,37 @@
-version: '3.8'
-
 services:
   postgres:
-    image: postgres:latest
+    image: postgres:16-alpine
     container_name: credits_db_postgres
     environment:
       POSTGRES_DB: credits_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d credits_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - credit_network
+
+  api:
+    build:
+      context: .
+      dockerfile: src/CreditSystem.Api/Dockerfile
+    container_name: credits_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=credits_db;Username=postgres;Password=postgres
+    ports:
+      - "5080:8080"
     networks:
       - credit_network
 
