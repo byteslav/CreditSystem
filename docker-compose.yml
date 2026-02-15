@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:latest
+    container_name: credits_db_postgres
+    environment:
+      POSTGRES_DB: credits_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - credit_network
+
+networks:
+  credit_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
