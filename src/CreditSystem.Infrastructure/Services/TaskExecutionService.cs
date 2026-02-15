@@ -6,25 +6,33 @@ using CreditSystem.Application.Interfaces.Services;
 using CreditSystem.Domain.Enums;
 using CreditSystem.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 public class TaskExecutionService : ITaskExecutionService
 {
+    private const int MinTaskCost = 1;
+    private const int MaxTaskCostExclusive = 15;
+    private const int MinExecutionDelayMs = 10000;
+    private const int MaxExecutionDelayMs = 40001;
+
     private readonly ITaskRepository _taskRepository;
     private readonly IUserRepository _userRepository;
     private readonly ApplicationDbContext _context;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<TaskExecutionService> _logger;
-    private static readonly Random _random = new();
 
     public TaskExecutionService(
         ITaskRepository taskRepository,
         IUserRepository userRepository,
         ApplicationDbContext context,
+        IServiceScopeFactory scopeFactory,
         ILogger<TaskExecutionService> logger)
     {
         _taskRepository = taskRepository;
         _userRepository = userRepository;
         _context = context;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -54,14 +62,7 @@ public class TaskExecutionService : ITaskExecutionService
             if (task.Status != TaskStatus.Created)
             {
                 _logger.LogInformation("Task is not in Created status. Current status: {Status}. Returning early for idempotency.", task.Status);
-                return new ExecuteTaskResponse
-                {
-                    Id = task.Id,
-                    Status = task.Status.ToString(),
-                    Cost = task.Cost ?? 0,
-                    StartedAt = task.StartedAt ?? DateTime.UtcNow,
-                    Message = "Task has already been processed."
-                };
+                return BuildAlreadyProcessedResponse(task);
             }
 
             var user = await _userRepository.GetByIdAsyncTracked(userId, cancellationToken);
@@ -71,7 +72,7 @@ public class TaskExecutionService : ITaskExecutionService
                 throw new InvalidOperationException("User not found.");
             }
 
-            int cost = _random.Next(1, 16);
+            int cost = Random.Shared.Next(MinTaskCost, MaxTaskCostExclusive);
             _logger.LogInformation("Generated cost for TaskId: {TaskId}: {Cost} credits", taskId, cost);
 
             if (user.Credits < cost)
@@ -116,7 +117,7 @@ public class TaskExecutionService : ITaskExecutionService
                 Message = "Task execution started."
             };
 
-            _ = ExecuteTaskInBackgroundAsync(taskId, userId, cancellationToken);
+            _ = Task.Run(() => ExecuteTaskInBackgroundAsync(taskId, userId));
 
             return response;
         }
@@ -128,55 +129,71 @@ public class TaskExecutionService : ITaskExecutionService
         }
     }
 
-    private async Task ExecuteTaskInBackgroundAsync(Guid taskId, Guid userId, CancellationToken cancellationToken)
+    private async Task ExecuteTaskInBackgroundAsync(Guid taskId, Guid userId)
     {
         try
         {
-            int delayMs = _random.Next(10000, 40001);
+            int delayMs = Random.Shared.Next(MinExecutionDelayMs, MaxExecutionDelayMs);
             _logger.LogInformation("Starting background execution for TaskId: {TaskId}. Delay: {DelayMs}ms", taskId, delayMs);
 
-            await Task.Delay(delayMs, cancellationToken);
+            await Task.Delay(delayMs);
 
-            using var bgTransaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-            try
+            using var scope = _scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            await using var bgTransaction = await dbContext.Database.BeginTransactionAsync();
+            var task = await dbContext.TaskItems.FirstOrDefaultAsync(t => t.Id == taskId);
+            if (task == null)
             {
-                var task = await _taskRepository.GetByIdAsyncTracked(taskId, cancellationToken);
-                if (task == null)
-                {
-                    _logger.LogWarning("Task not found in background execution: {TaskId}", taskId);
-                    return;
-                }
+                _logger.LogWarning("Task not found in background execution: {TaskId}", taskId);
+                return;
+            }
 
-                bool succeeded = _random.Next(0, 2) == 0;
-                task.Status = succeeded ? TaskStatus.Succeeded : TaskStatus.Failed;
-                task.CompletedAt = DateTime.UtcNow;
+            if (task.UserId != userId)
+            {
+                _logger.LogWarning("Task ownership mismatch in background execution. TaskId: {TaskId}, UserId: {UserId}",
+                    taskId, userId);
+                return;
+            }
 
-                if (!succeeded)
-                {
-                    task.FailureReason = "Random failure during execution simulation.";
-                }
-
-                await _taskRepository.SaveChangesAsync(cancellationToken);
-                await bgTransaction.CommitAsync(cancellationToken);
-
-                _logger.LogInformation("Background execution completed for TaskId: {TaskId}. Status: {Status}",
+            if (task.Status != TaskStatus.Running)
+            {
+                _logger.LogInformation("Skipping background completion for TaskId: {TaskId}. Current status: {Status}",
                     taskId, task.Status);
+                return;
             }
-            catch (Exception ex)
+
+            bool succeeded = Random.Shared.Next(0, 2) == 0; // simulating 50% success rate
+            task.Status = succeeded ? TaskStatus.Succeeded : TaskStatus.Failed;
+            task.CompletedAt = DateTime.UtcNow;
+
+            if (!succeeded)
             {
-                await bgTransaction.RollbackAsync(cancellationToken);
-                _logger.LogError(ex, "Error in background execution for TaskId: {TaskId}: {Message}",
-                    taskId, ex.Message);
+                task.FailureReason = "Random failure during execution simulation.";
             }
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("Background execution cancelled for TaskId: {TaskId}", taskId);
+
+            await dbContext.SaveChangesAsync();
+            await bgTransaction.CommitAsync();
+
+            _logger.LogInformation("Background execution completed for TaskId: {TaskId}. Status: {Status}",
+                taskId, task.Status);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception in background execution for TaskId: {TaskId}: {Message}",
                 taskId, ex.Message);
         }
+    }
+
+    private static ExecuteTaskResponse BuildAlreadyProcessedResponse(Domain.Entities.TaskItem task)
+    {
+        return new ExecuteTaskResponse
+        {
+            Id = task.Id,
+            Status = task.Status.ToString(),
+            Cost = task.Cost ?? 0,
+            StartedAt = task.StartedAt ?? DateTime.UtcNow,
+            Message = "Task has already been processed."
+        };
     }
 }

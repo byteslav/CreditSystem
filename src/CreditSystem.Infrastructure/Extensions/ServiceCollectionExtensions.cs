@@ -8,6 +8,7 @@ using CreditSystem.Infrastructure.Persistence;
 using CreditSystem.Infrastructure.Repositories;
 using CreditSystem.Infrastructure.Security;
 using CreditSystem.Infrastructure.Services;
+using CreditSystem.Infrastructure.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,9 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString));
+
+        services.Configure<AutoGrantOptions>(configuration.GetSection(AutoGrantOptions.SectionName));
+        services.AddHostedService<AutoCreditGrantBackgroundService>();
 
         return services;
     }
