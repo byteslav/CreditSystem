@@ -12,10 +12,10 @@ using Microsoft.Extensions.Logging;
 public class TaskExecutionService : ITaskExecutionService
 {
     private const int MinTaskCost = 1;
-    private const int MaxTaskCostExclusive = 15;
+    private const int MaxTaskCostExclusive = 16;
     private const int MinExecutionDelayMs = 10000;
     private const int MaxExecutionDelayMs = 40001;
-
+    
     private readonly ITaskRepository _taskRepository;
     private readonly IUserRepository _userRepository;
     private readonly ApplicationDbContext _context;
@@ -65,7 +65,7 @@ public class TaskExecutionService : ITaskExecutionService
                 return BuildAlreadyProcessedResponse(task);
             }
 
-            var user = await _userRepository.GetByIdAsyncTracked(userId, cancellationToken);
+            var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
             if (user == null)
             {
                 _logger.LogError("User not found: {UserId}", userId);
@@ -75,7 +75,9 @@ public class TaskExecutionService : ITaskExecutionService
             int cost = Random.Shared.Next(MinTaskCost, MaxTaskCostExclusive);
             _logger.LogInformation("Generated cost for TaskId: {TaskId}: {Cost} credits", taskId, cost);
 
-            if (user.Credits < cost)
+            var creditsDeducted = await _userRepository.TryDeductCreditsAsync(userId, cost, cancellationToken);
+
+            if (!creditsDeducted)
             {
                 _logger.LogInformation("Insufficient credits for TaskId: {TaskId}. Required: {Cost}, Available: {Credits}",
                     taskId, cost, user.Credits);
@@ -93,11 +95,10 @@ public class TaskExecutionService : ITaskExecutionService
                     Status = task.Status.ToString(),
                     Cost = cost,
                     StartedAt = DateTime.UtcNow,
-                    Message = $"Insufficient credits. Required: {cost}, Available: {user.Credits}"
+                    Message = $"Insufficient credits. Required: {cost}."
                 };
             }
 
-            user.Credits -= cost;
             task.Cost = cost;
             task.Status = TaskStatus.Running;
             task.StartedAt = DateTime.UtcNow;

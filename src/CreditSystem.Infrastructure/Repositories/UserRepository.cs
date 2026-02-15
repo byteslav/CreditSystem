@@ -39,6 +39,18 @@ public class UserRepository : IUserRepository
             .FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
     }
 
+    public async Task<bool> TryDeductCreditsAsync(Guid userId, int amount, CancellationToken cancellationToken = default)
+    {
+        var rowsAffected = await _context.Users
+            .Where(u => u.Id == userId && u.Credits >= amount)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(u => u.Credits, u => u.Credits - amount),
+                cancellationToken);
+
+        return rowsAffected == 1;
+    }
+
     public async Task AddAsync(User user, CancellationToken cancellationToken = default)
     {
         await _context.Users.AddAsync(user, cancellationToken);
