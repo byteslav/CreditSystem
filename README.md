@@ -89,6 +89,7 @@ classDiagram
 		User "1" --> "0..*" TaskItem : owns
 		User "1" --> "0..*" CreditTransaction : has
 		TaskItem "1" --> "0..*" CreditTransaction : optional link via TaskItemId
+		TaskItem --> TaskStatus
 ```
 
 ---
