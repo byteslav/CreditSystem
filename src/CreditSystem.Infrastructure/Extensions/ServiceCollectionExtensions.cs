@@ -35,11 +35,13 @@ public static class ServiceCollectionExtensions
         var audience = jwtSettings["Audience"] ?? "CreditSystemUsers";
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ITaskRepository, TaskRepository>();
         services.AddScoped<IPasswordHasher, PasswordHasher>();
         services.AddScoped<IJwtTokenGenerator>(sp =>
             new JwtTokenGenerator(secretKey, issuer, audience, expirationMinutes: 60));
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<ITaskService, TaskService>();
 
         return services;
     }
