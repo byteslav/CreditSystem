@@ -1,15 +1,16 @@
 # CreditSystem API
 
-CreditSystem is a .NET 8 Web API that manages user credits and task execution, where credits are consumed only when tasks are executed.
+CreditSystem is a .NET 8 Web API that manages user credits and task execution
 
 ---
 
 ## Table of Contents
 
 - [1. How to Run the API](#1-how-to-run-the-api)
-- [2. Available Endpoints and Usage](#2-available-endpoints-and-usage)
-- [3. Assumptions and Design Decisions](#3-assumptions-and-design-decisions)
-- [4. Key Trade-offs and Why](#4-key-trade-offs-and-why)
+- [2. Class Diagram (Domain Model)](#2-class-diagram-domain-model)
+- [3. Available Endpoints and Usage](#3-available-endpoints-and-usage)
+- [4. Assumptions and Design Decisions](#4-assumptions-and-design-decisions)
+- [5. Key Trade-offs and Why](#5-key-trade-offs-and-why)
 
 ---
 
@@ -42,9 +43,57 @@ docker compose down
 docker compose down -v
 ```
 
+## 2. Class Diagram (Domain Model)
+
+```mermaid
+classDiagram
+		class User {
+			+Guid Id
+			+string Email
+			+string Username
+			+string PasswordHash
+			+int Credits
+			+DateTime RegisteredAt
+			+DateTime? LastCreditGrantAt
+		}
+
+		class TaskItem {
+			+Guid Id
+			+Guid UserId
+			+TaskStatus Status
+			+int? Cost
+			+DateTime CreatedAt
+			+DateTime? StartedAt
+			+DateTime? CompletedAt
+			+string? FailureReason
+		}
+
+		class CreditTransaction {
+			+Guid Id
+			+Guid UserId
+			+Guid? TaskItemId
+			+int Amount
+			+CreditTransactionType Type
+			+DateTime CreatedAt
+		}
+
+		class TaskStatus {
+			<<enum>>
+			Created
+			Running
+			Succeeded
+			Failed
+			Rejected
+		}
+
+		User "1" --> "0..*" TaskItem : owns
+		User "1" --> "0..*" CreditTransaction : has
+		TaskItem "1" --> "0..*" CreditTransaction : optional link via TaskItemId
+```
+
 ---
 
-## 2. Available Endpoints and Usage
+## 3. Available Endpoints and Usage
 
 > All task and user endpoints require `Authorization: <jwt_token>`.
 
@@ -168,7 +217,7 @@ Example response (`200 OK`):
 
 ---
 
-## 3. Project Design Decisions
+## 4. Project Design Decisions
 
 ### Key Assumptions
 1. **Task execution API is asynchronous from client perspective**: endpoint returns quickly with `Running`, completion happens in background.
@@ -190,7 +239,7 @@ src/
 ```
 ---
 
-## 4. Key Trade-offs and Why
+## 5. Key Trade-offs and Why
 
 This section focuses on choices made in `TaskExecutionService` and `AutoCreditGrantBackgroundService` according to requirements.
 
