@@ -1,6 +1,7 @@
 # CreditSystem API
 
 CreditSystem is a .NET 8 Web API that manages user credits and task execution
+> **Requirements:** See the [full requirements here](https://docs.google.com/document/d/1-8rekPlcKksdXfmAHiTLmg-CRSh2nCeB/edit#heading=h.bf6wc73ou7pb)
 
 ---
 
